@@ -82,10 +82,10 @@ When this option is activated, a proxy user/key/site could be defined to overpas
 <h2>Important Notes </h2>
 
 All downloaded and processed images are stored by default in your home directory in eraInterim forlder: ~/eraInterim
-
+<br><br>
 To Do List
-
-Improve console output
-Allow grid download
-Maintain with bug error 
+<br><br>
+Improve console output<br>
+Allow grid download<br>
+Maintain with bug error <br>
 
