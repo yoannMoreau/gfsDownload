@@ -46,14 +46,14 @@ python eraInterimDownload.py -c 167 -i 2014-01-01 -e 2014-01-02 -s PATH_TO_SHAPE
 <i>--pressure on a area  during the first month of 2015 on a specific extend<br></i>
 python eraInterimDownload.py -c 134 -i 2015-01-01 -e 2015-02-01 -E xmin,ymax,xmax,ymin'<br>
 <br><br>
-<u>Five paramaters are optional: </u><br>
+<u>Five paramaters are optional: </u><br><br>
 <b>--Time <EraInterim Time> (default 00)'</b><br>
 The time for starting modelisation. It could be 00h 06h,12h or 18h (selection in 00,06,12,18). 
 Default is 0. 
 A list is possible for that parameter
 <br><br>
 python eraInterimDownload.py -c 168 -i 2013-11-08 -e 2013-12-09 -E xmin,ymax,xmax,ymin -t 00,06,12,18'
-<br>
+<br><br>
 <b>--Step <EraInterim Time> (default 0)' </b><br>
 The step of modeling. Some parameters are not possible within some of the possibilities. 
 Check the documentation for more information.
@@ -61,19 +61,19 @@ default is 0.
 A list is possible for that parameter
 <br><br>
 python eraInterimDownload.py -c 168 -i 2013-11-08 -e 2013-12-09 -E xmin,ymax,xmax,ymin -p 0,6'
-<br>
+<br><br>
 <b>--Grid <grid spacing on °.arc> (default 0)'</b> 
 <br><br>
 The spacing of final raster. grid possible : 0.125/0.25/0.5/0.75/1.125/1.5/2/2.5/3
 default is 0.75
 <br><br>
 python eraInterimDownload.py -c 168 -i 2011-10-01 -e 2011-10-02 -E xmin,ymax,xmax,ymin -g 0,125'
-<br>
+<br><br>
 <b>--Outfile <Path to downloaded Raster> (default /home/user/eraInterim)'</b>
 <br><br>
 python eraInterimDownload.py -c 168 -i 2011-10-01 -e 2011-10-02 -E xmin,ymax,xmax,ymin -o PATH/TO/FILE'
 All downloaded raster are netcdf with a code_DateInit_DateEnd.nc name 
-<br>
+<br><br>
 <b>--proxy <proxy : True/False></b> (default False)
 <br><br>
 Sometimes a proxy definition is needed for downloading from external network.
