@@ -55,7 +55,10 @@ A list is possible for that parameter
 python eraInterimDownload.py -c 168 -i 2013-11-08 -e 2013-12-09 -E xmin,ymax,xmax,ymin -t 00,06,12,18'
 <br><br>
 <b>--Step <EraInterim Time> (default 0)' </b><br>
-The step of modeling. Some parameters are not possible within some of the possibilities. 
+The step of modeling. 
+If step 0 is chosen, then only analysed fields, which are produced for 0000, 0600, 1200 and 1800 UTC, are available.
+If step 3, 6, 9 or 12 is selected then only forecast fields which are produced from forecasts beginning at 0000 and 1200 UTC, are available. 
+Some parameters are not possible within some of the possibilities. 
 Check the documentation for more information.
 default is 0. 
 A list is possible for that parameter
