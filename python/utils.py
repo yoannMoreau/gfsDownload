@@ -14,6 +14,10 @@ import errno
 from datetime import date,datetime
 import ogr,osr
 import re
+import gdal
+import osr
+import numpy as np
+import subprocess
     
 def checkForFile(pathToFile):
     if os.path.isfile(pathToFile):
@@ -100,7 +104,7 @@ def convertShpToExtend(pathToShp):
         pointMIN.Transform(coordTrans)
 
 
-        return [pointMIN.GetPoint()[0],pointMAX.GetPoint()[1],pointMAX.GetPoint()[0],pointMIN.GetPoint()[1]]
+        return [pointMAX.GetPoint()[1],pointMIN.GetPoint()[0],pointMIN.GetPoint()[1],pointMAX.GetPoint()[0]]
     else:
         exit(" shapefile not found. Please verify your path to the shapefile")
 
@@ -112,14 +116,14 @@ def is_float_re(element):
 
 def checkForExtendValidity(extendList):
     
-    if len(extendList)==4 and all([is_float_re(str(x)) for x in extendList]) and extendList[0]<extendList[2] and extendList[1]>extendList[3]:
+    if len(extendList)==4 and all([is_float_re(str(x)) for x in extendList]) and extendList[0]>extendList[2] and extendList[1]<extendList[3]:
         if float(extendList[0]) > -180 and float(extendList[2]) <180 and float(extendList[1]) <90 and  float(extendList[3]) > -90:
             extendArea=[str(x) for x in extendList]
             return extendArea
         else:
             exit('Projection given is not in WGS84. Please verify your -t parameter')
     else:
-        exit('Area scpecified is not conform to a xmin ymax xmax ymin extend. please verify your declaration')
+        exit('Area scpecified is not conform to a  ymax xmin ymin xmax  extend. please verify your declaration')
 
 def checkForTimeValidity(listTime):
     
@@ -132,7 +136,7 @@ def checkForTimeValidity(listTime):
 
 def checkForStepValidity(listStep):
     
-    validParameters=(0,3,6,12)
+    validParameters=(0,3,6,9,12)
     
     if len(listStep)>0 and isinstance(listStep, list) and all([int(x) in validParameters for x in listStep]):
         listStep=[int(x) for x in listStep]
@@ -173,7 +177,7 @@ def create_request_sfc(dateStart,dateEnd, timeList,stepList,grid,extent,paramLis
     'stream'  : "oper",
     'step'    : "/".join(map(str, stepList)),
     'levtype' : "sfc",
-    'type'    : "an",
+    'type'    : "fc",
     'class'   : "ei",
     'param'   : ".128/".join(map(str, paramList))+'.128',
     'area'    : "/".join(extent),
@@ -183,5 +187,53 @@ def create_request_sfc(dateStart,dateEnd, timeList,stepList,grid,extent,paramLis
     }
     
     return struct
+
+def reprojRaster(pathToImg,output,pathToShape):
+    
+    driver = ogr.GetDriverByName('ESRI Shapefile')
+    dataSource = driver.Open(pathToShape, 0)
+    layer = dataSource.GetLayer()
+    srs = layer.GetSpatialRef()
+    print ["gdalwarp","-q","-s_srs","EPSG:4326","-t_srs",srs.ExportToWkt(),pathToImg,output,'-overwrite','-dstnodata',"0"]
+    subprocess.call(["gdalwarp","-q","-s_srs","EPSG:4326","-t_srs",srs.ExportToWkt(),pathToImg,output,'-overwrite','-dstnodata',"0"])
+    return output
+
+def convertNETCDFtoTIF(inputFile,outputFile,format='float'):
+    #--convert netCDF to tif
+    
+    ds_in=gdal.Open('NETCDF:"'+inputFile+'"')
+    metadata = ds_in.GetMetadata()
+
+    scale=metadata['tp#scale_factor']
+    offset=metadata['tp#add_offset']
+    nodata=metadata['tp#_FillValue']
+
+    cols = ds_in.RasterXSize
+    rows = ds_in.RasterYSize
+    geotransform = ds_in.GetGeoTransform()
+    originX = geotransform[0]
+    originY = geotransform[3]
+    pixelWidth = geotransform[1]
+    pixelHeight = geotransform[5]
+    nbBand= ds_in.RasterCount
+    
+    driver = gdal.GetDriverByName('GTiff')
+    outRaster = driver.Create(outputFile, cols, rows, nbBand, gdal.GDT_Float32)
+    outRaster.SetGeoTransform((originX, pixelWidth, 0, originY, 0, pixelHeight))
+
+    
+    for b in range(1,nbBand+1):
+        band = ds_in.GetRasterBand(b)
+        
+        arrayB = np.array(band.ReadAsArray(), dtype=format)
+        np.putmask(arrayB,(arrayB==float(nodata)),0)
+        #arrayB=numpy.multiply(arrayB, scale)+float(offset)
+        trans_arrayB=arrayB*float(scale)+float(offset)
+        np.putmask(trans_arrayB,(arrayB==float(nodata)+1),0)
+        outband = outRaster.GetRasterBand(b)
+
+        outband.WriteArray(trans_arrayB)
+    
+    outband.FlushCache()
 
 

@@ -13,6 +13,10 @@ the period needed and an optional outputFile for downloaded raster
 import sys
 import getopt
 import os
+#from netCDF4 import Dataset
+import gdal
+import osr
+import numpy
 
 import utils as utils
 from ecmwfapi import ECMWFDataServer
@@ -157,7 +161,7 @@ def main(argv):
     try:
         step
     except NameError:
-        step=[0]
+        step=[3,6,9,12]
     step=utils.checkForStepValidity(step)
     
     try:
@@ -186,13 +190,61 @@ def main(argv):
     
     #Download NETCDF
     server = ECMWFDataServer()
-    struct=utils.create_request_sfc(startDate, endDate, time, step, grid, extendArea, codeEra, oFolder+'/'+"/".join([str(x) for x in codeEra])+'_'+startDate.strftime('%Y%m%d')+'_'+endDate.strftime('%Y%m%d')+'.nc')
+    outNETCDFFile=oFolder+'/'+"/".join([str(x) for x in codeEra])+'_'+startDate.strftime('%Y%m%d')+'_'+endDate.strftime('%Y%m%d')+'.nc'
+    struct=utils.create_request_sfc(startDate, endDate, time, step, grid, extendArea, codeEra,outNETCDFFile )
+    print struct
+    #exit()
     server.retrieve(struct)
-    
-     
+    utils.convertNETCDFtoTIF(outNETCDFFile, oFolder+'/tmp.tif')
+    utils.reprojRaster(oFolder+'/tmp.tif',outNETCDFFile.rsplit('.')[0]+'.tif',pathToShapefile)
+    os.remove(oFolder+'/tmp.tif')
+    os.remove(outNETCDFFile)
     
 if __name__ == '__main__':
     main(sys.argv[1:])
+    
+    
+    #--convert netCDF to tif
+    #datafile='/home/ouaf/eraInterim/228_20130102_20130103.nc'
+    #outFile='/home/ouaf/eraInterim/228_20130102_20130103.tif'
+    #shp='/home/ouaf/landsat/zone_etude_4326.shp'
+    #utils.reprojRaster(outFile,shp)
+    #exit()
+    #ds_in=gdal.Open('NETCDF:"'+datafile+'"')
+    #metadata = ds_in.GetMetadata()
+
+    #scale=metadata['tp#scale_factor']
+    #offset=metadata['tp#add_offset']
+    #nodata=metadata['tp#_FillValue']
+
+    #cols = ds_in.RasterXSize
+    #rows = ds_in.RasterYSize
+    #geotransform = ds_in.GetGeoTransform()
+    #originX = geotransform[0]
+    #originY = geotransform[3]
+    #pixelWidth = geotransform[1]
+    #pixelHeight = geotransform[5]
+    
+    #band = ds_in.GetRasterBand(1)
+    #format='float'
+    #arrayB = numpy.array(band.ReadAsArray(), dtype=format)
+    #numpy.putmask(arrayB,(arrayB==float(nodata)),0)
+    #arrayB=numpy.multiply(arrayB, scale)+float(offset)
+    #trans_arrayB=arrayB*float(scale)+float(offset)
+    #numpy.putmask(trans_arrayB,(arrayB==float(nodata)+1),0)
+    
+    #driver = gdal.GetDriverByName('GTiff')
+    #outRaster = driver.Create(outFile, cols, rows, 1, gdal.GDT_Float32)
+    #outRaster.SetGeoTransform((originX, pixelWidth, 0, originY, 0, pixelHeight))
+    
+    #outband = outRaster.GetRasterBand(1)
+    #outband.WriteArray(trans_arrayB)
+    #outRasterSRS = osr.SpatialReference()
+    #spatialRef = osr.SpatialReference()
+    #spatialRef.ImportFromEPSG(4326)
+    #outRaster.SetProjection(spatialRef.ExportToWkt())
+    #outband.FlushCache()
+
     
     #server = ECMWFDataServer()
     #server.retrieve({
