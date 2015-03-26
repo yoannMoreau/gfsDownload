@@ -186,7 +186,7 @@ def create_request_sfc(dateStart,dateEnd, timeList,stepList,grid,extent,paramLis
     
     return struct
 
-def reprojRaster(pathToImg,output,pathToShape):
+def reprojRaster(pathToImg,output,pathToShape=None):
     
     driver = ogr.GetDriverByName('ESRI Shapefile')
     if pathToShape is not None:

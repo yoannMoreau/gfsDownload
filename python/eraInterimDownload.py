@@ -192,11 +192,15 @@ def main(argv):
     server = ECMWFDataServer()
     outNETCDFFile=oFolder+'/'+"/".join([str(x) for x in codeEra])+'_'+startDate.strftime('%Y%m%d')+'_'+endDate.strftime('%Y%m%d')+'.nc'
     struct=utils.create_request_sfc(startDate, endDate, time, step, grid, extendArea, codeEra,outNETCDFFile )
-    print struct
-    #exit()
     server.retrieve(struct)
+    
     utils.convertNETCDFtoTIF(outNETCDFFile, oFolder+'/tmp.tif')
-    utils.reprojRaster(oFolder+'/tmp.tif',outNETCDFFile.rsplit('.')[0]+'.tif',pathToShapefile)
+    if ('pathToShapefile' in locals()):
+        utils.reprojRaster(oFolder+'/tmp.tif',outNETCDFFile.rsplit('.')[0]+'.tif',pathToShapefile)
+
+    else:
+        utils.reprojRaster(oFolder+'/tmp.tif',outNETCDFFile.rsplit('.')[0]+'.tif')
+    
     os.remove(oFolder+'/tmp.tif')
     os.remove(outNETCDFFile)
     
