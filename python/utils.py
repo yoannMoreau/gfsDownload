@@ -4,8 +4,6 @@ Created on 16 déc. 2013
 
 @author: yoann Moreau
 
-RMQ pas vraiment utile
-
 All controls operations :
 return true if control ok 
 '''
@@ -194,7 +192,7 @@ def reprojRaster(pathToImg,output,pathToShape):
     dataSource = driver.Open(pathToShape, 0)
     layer = dataSource.GetLayer()
     srs = layer.GetSpatialRef()
-    print ["gdalwarp","-q","-s_srs","EPSG:4326","-t_srs",srs.ExportToWkt(),pathToImg,output,'-overwrite','-dstnodata',"0"]
+
     subprocess.call(["gdalwarp","-q","-s_srs","EPSG:4326","-t_srs",srs.ExportToWkt(),pathToImg,output,'-overwrite','-dstnodata',"0"])
     return output
 
