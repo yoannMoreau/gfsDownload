@@ -189,11 +189,15 @@ def create_request_sfc(dateStart,dateEnd, timeList,stepList,grid,extent,paramLis
 def reprojRaster(pathToImg,output,pathToShape):
     
     driver = ogr.GetDriverByName('ESRI Shapefile')
-    dataSource = driver.Open(pathToShape, 0)
-    layer = dataSource.GetLayer()
-    srs = layer.GetSpatialRef()
+    if pathToShape is not None:
+        dataSource = driver.Open(pathToShape, 0)
+        layer = dataSource.GetLayer()
+        srs = layer.GetSpatialRef()
+        proj = srs.ExportToWkt()
+    else :
+        proj='EPSG:4326'
 
-    subprocess.call(["gdalwarp","-q","-s_srs","EPSG:4326","-t_srs",srs.ExportToWkt(),pathToImg,output,'-overwrite','-dstnodata',"0"])
+    subprocess.call(["gdalwarp","-q","-s_srs","EPSG:4326","-t_srs",proj,pathToImg,output,'-overwrite','-dstnodata',"0"])
     return output
 
 def convertNETCDFtoTIF(inputFile,outputFile,format='float'):
