@@ -93,9 +93,9 @@ def main(argv):
         print '  or'
         print '    -E < xmin,ymax,xmax,ymin>]'
         print ''
-        print '    [-t <eraInterim time parameters in 00/66/12/18> (default 00)] -list possible-'
-        print '    [-g <size of grid in 0.125/0.25/0.5/0.75/1.125/1.5/2/2.5/3> (default0.75)]'
-        print '    [-p <eraInterim step parameter in 00/03/06/12> default 0] -list possible-'
+        print '    [-t <eraInterim time parameters in 00/06/12/18> (default 00,12)] -list possible-'
+        print '    [-g <size of grid in 0.125/0.25/0.5/0.75/1.125/1.5/2/2.5/3> (default 0.75)]'
+        print '    [-p <eraInterim step parameter in 00/03/06/12> default 3,6,9,12] -list possible-'
         print '    [-o <outfolder> (default /home/user/eraInterim)]'
         print '    [-P <proxy> (default False)]'
         print ''
@@ -149,7 +149,7 @@ def main(argv):
     try:
         time
     except NameError:
-        time=['00']
+        time=['00','12']
     time=utils.checkForTimeValidity(time)
     
     try:

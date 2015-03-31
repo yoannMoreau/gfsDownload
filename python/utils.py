@@ -205,10 +205,14 @@ def convertNETCDFtoTIF(inputFile,outputFile,format='float'):
     
     ds_in=gdal.Open('NETCDF:"'+inputFile+'"')
     metadata = ds_in.GetMetadata()
-
-    scale=metadata['tp#scale_factor']
-    offset=metadata['tp#add_offset']
-    nodata=metadata['tp#_FillValue']
+    
+    for i in metadata.keys():
+        if i.find('scale_factor')>0:
+            scale=metadata[i]
+        elif i.find('add_offset')>0:
+            offset=metadata[i]
+        elif i.find('_FillValue')>0:
+            nodata=metadata[i]
 
     cols = ds_in.RasterXSize
     rows = ds_in.RasterYSize
