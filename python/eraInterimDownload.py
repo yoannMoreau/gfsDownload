@@ -24,7 +24,7 @@ from ecmwfapi import ECMWFDataServer
 def main(argv):
 
     try:
-        opts,argv = getopt.getopt(argv,":h:i:e:s:o:c:E:t:p:g:P:",['help','[outFile]','code','[shapeFile]','start','end','[tr]'])
+        opts,argv = getopt.getopt(argv,":h:i:e:s:o:c:E:t:p:g:P:m:",['help','[outFile]','code','[shapeFile]','start','end','[tr]'])
     except getopt.GetoptError:
         print 'error in parameter for eraInterimDownload. type eraInterimDownload.py -help for more detail on use '
         sys.exit(2)
@@ -39,10 +39,11 @@ def main(argv):
             print '        --shapefile <shapefile> OU -Extend < xmin,ymax,xmax,ymin>'
             print '    [optional] :'
             print '        --time <EraInterim Time> (default 00)'
-            print '        --step <EraInterim Step> (default 0)'
+            print '        --step <EraInterim Step> (default 3,6,9,12)'
             print '        --grid <EraInterim Time> (default 0.75)'
             print '        --outfile <outfolder> (default /home/user/eraInterim)'
             print '        --proxy <proxy : True/False> (default False)'
+            print '        --mode <mode : analyse/forcast> (default analyse)'
             print ''
             print 'EXAMPLES'
             print '--temperature on a shapefile'
@@ -83,6 +84,8 @@ def main(argv):
             step = arg.split(',')
         elif opt in ('-P','--proxy'):
             proxy = arg
+        elif opt in ('-m','--mode'):
+            mode = arg
     
     if len(sys.argv) < 8:
         print 'eraInterimDownload.py'
@@ -168,6 +171,11 @@ def main(argv):
         proxy
     except NameError:
         proxy=False
+        
+    try:
+        mode
+    except NameError:
+        mode='analyse'
     
     #Proxy parameteres needed
     if(proxy):
@@ -191,15 +199,34 @@ def main(argv):
     #Download NETCDF
     server = ECMWFDataServer()
     outNETCDFFile=oFolder+'/'+"/".join([str(x) for x in codeEra])+'_'+startDate.strftime('%Y%m%d')+'_'+endDate.strftime('%Y%m%d')+'.nc'
-    struct=utils.create_request_sfc(startDate, endDate, time, step, grid, extendArea, codeEra,outNETCDFFile )
-    server.retrieve(struct)
+    struct=utils.create_request_sfc(startDate, endDate, time, step, grid, extendArea, codeEra,outNETCDFFile,mode)
+    
+    if len(struct[0])==0:
+        exit()
+    else:
+        for i in struct[0]:
+            try :
+                server.retrieve(i)
+            except:
+                print("---")
+                exit('Error in EraInterim server')
+    
+
+    
+    if struct[1] is not None:
+        print ("")
+        print ("--------------------------------------------------")
+        print ("")
+        print ("Some parameters couldn't been downloaded in %s mode :" % mode + ' '+ struct[1]  )
+        print ("They have been downloaded in %s mode" % struct[2] )
+
     
     utils.convertNETCDFtoTIF(outNETCDFFile, oFolder+'/tmp.tif')
+    shape=utils.getShape(outNETCDFFile)
     if ('pathToShapefile' in locals()):
-        utils.reprojRaster(oFolder+'/tmp.tif',outNETCDFFile.rsplit('.')[0]+'.tif',pathToShapefile)
-
+        utils.reprojRaster(oFolder+'/tmp.tif',outNETCDFFile.rsplit('.')[0]+'.tif',shape,pathToShapefile)
     else:
-        utils.reprojRaster(oFolder+'/tmp.tif',outNETCDFFile.rsplit('.')[0]+'.tif')
+        utils.reprojRaster(oFolder+'/tmp.tif',outNETCDFFile.rsplit('.')[0]+'.tif',shape)
     
     os.remove(oFolder+'/tmp.tif')
     os.remove(outNETCDFFile)

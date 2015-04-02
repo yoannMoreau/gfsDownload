@@ -156,7 +156,7 @@ def checkForGridValidity(grid):
         exit('grid parameters not conform to eraInterim posibility : '+ ",".join([str(x) for x in validParameters]))
     
 
-def create_request_sfc(dateStart,dateEnd, timeList,stepList,grid,extent,paramList,output):
+def create_request_sfc(dateStart,dateEnd, timeList,stepList,grid,extent,paramList,output,typeData):
     """
         Genere la structure de requete sur les serveurs de l'ECMWF
         
@@ -168,25 +168,76 @@ def create_request_sfc(dateStart,dateEnd, timeList,stepList,grid,extent,paramLis
         -output : nom & chemin du fichier resultat
     """
     
-    struct = {
-    'dataset' : "interim",
-    'date'    : dateStart.strftime("%Y-%m-%d")+"/to/"+dateEnd.strftime("%Y-%m-%d"),
-    'time'    : "/".join(map(str, timeList)),
-    'stream'  : "oper",
-    'step'    : "/".join(map(str, stepList)),
-    'levtype' : "sfc",
-    'type'    : "fc",
-    'class'   : "ei",
-    'param'   : ".128/".join(map(str, paramList))+'.128',
-    'area'    : "/".join(extent),
-    'grid'    : str(grid)+"/"+str(grid),
-    'target'  : output,
-    'format'  : 'netcdf'
-    }
+    listForcastSurface=[129,172,31,32,33,34,35,36,37,38,39,40,41,42,59,78,79,134,136,137,139,141,148,151,159,164,165,166,167,168,170,183,186,187,188,198,206,229,230,231,232,235,236,238,243,244,245,20,44,45,50,57,58,142,143,145,146,147,169,175,176,177,178,179,180,181,182,189,195,196,197,205,208,209,210,211,212,239,240]
+    listAnalyseSurface=[27,28,29,30,74,129,160,161,162,163,172,31,32,33,34,35,36,37,38,39,40,41,42,134,136,137,139,141,148,151,164,165,166,167,168,170,173,174,183,186,187,188,198,206,234,235,236,238]
     
-    return struct
+    listForcast=[]
+    listAnalyse=[]
+    structure = []
+    
+    if typeData=='forcast':
+        for i in paramList:
+            if int(i) in listForcastSurface:
+                listForcast.append(i)
+            else:
+                if int(i) in listAnalyseSurface:
+                    listAnalyse.append(i)
+                else:
+                    print "the parameter needed couldn't be downloaded because is not a Surface variable"
+    else:
+        for i in paramList:
+            if int(i) in listAnalyseSurface:
+                listAnalyse.append(i)
+            else:
+                if int(i) in listForcastSurface:
+                    listForcast.append(i)
+                else:
+                    print "the parameter needed couldn't be downloaded because is not a Surface variable"
+    
+    if len(listAnalyse)>0:
+        struct = {
+        'dataset' : "interim",
+        'date'    : dateStart.strftime("%Y-%m-%d")+"/to/"+dateEnd.strftime("%Y-%m-%d"),
+        'time'    : "/".join(map(str, timeList)),
+        'stream'  : "oper",
+        'step'    : "/".join(map(str, stepList)),
+        'levtype' : "sfc", #TO DO pl -> pressure level ,sfc -> surface
+        'type'    : "an", #TO DO fc -> forcast , an -> analyse
+        'class'   : "ei",
+        'param'   : ".128/".join(map(str, listAnalyse))+'.128',
+        'area'    : "/".join(extent),
+        'grid'    : str(grid)+"/"+str(grid),
+        'target'  : output,
+        'format'  : 'netcdf'
+        }
+        structure.append(struct)
+    
+    if len(listForcast)>0:
+        struct = {
+        'dataset' : "interim",
+        'date'    : dateStart.strftime("%Y-%m-%d")+"/to/"+dateEnd.strftime("%Y-%m-%d"),
+        'time'    : "/".join(map(str, timeList)),
+        'stream'  : "oper",
+        'step'    : "/".join(map(str, stepList)),
+        'levtype' : "sfc", #TO DO pl -> pressure level ,sfc -> surface
+        'type'    : "fc", #TO DO fc -> forcast , an -> analyse
+        'class'   : "ei",
+        'param'   : ".128/".join(map(str, listForcast))+'.128',
+        'area'    : "/".join(extent),
+        'grid'    : str(grid)+"/"+str(grid),
+        'target'  : output,
+        'format'  : 'netcdf'
+        }
+        structure.append(struct)
+    
+    if typeData=='forcast' and len(listAnalyse)>0:
+        return (structure,",".join(listAnalyse),"analyse")
+    elif typeData=='analyse' and len(listForcast)>0:
+        return (structure,",".join(listForcast),"forecast")
+    else:
+        return (structure,None)
 
-def reprojRaster(pathToImg,output,pathToShape=None):
+def reprojRaster(pathToImg,output,shape,pathToShape=None):
     
     driver = ogr.GetDriverByName('ESRI Shapefile')
     if pathToShape is not None:
@@ -196,9 +247,19 @@ def reprojRaster(pathToImg,output,pathToShape=None):
         proj = srs.ExportToWkt()
     else :
         proj='EPSG:4326'
-
-    subprocess.call(["gdalwarp","-q","-s_srs","EPSG:4326","-t_srs",proj,pathToImg,output,'-overwrite','-dstnodata',"0"])
+        
+    Xres=shape[0]
+    Yres=shape[1]
+    subprocess.call(["gdalwarp","-q","-t_srs",proj,pathToImg,output,'-ts',str(Xres),str(Yres),'-overwrite','-dstnodata',"0"])
     return output
+
+def getShape(pathToImg):
+        
+    raster = gdal.Open(pathToImg)
+    cols = raster.RasterXSize
+    rows = raster.RasterYSize
+    
+    return (cols,rows)
 
 def convertNETCDFtoTIF(inputFile,outputFile,format='float'):
     #--convert netCDF to tif
@@ -224,7 +285,7 @@ def convertNETCDFtoTIF(inputFile,outputFile,format='float'):
     nbBand= ds_in.RasterCount
     
     driver = gdal.GetDriverByName('GTiff')
-    outRaster = driver.Create(outputFile, cols, rows, nbBand, gdal.GDT_Float32)
+    outRaster = driver.Create(outputFile,cols, rows, nbBand, gdal.GDT_Float32)
     outRaster.SetGeoTransform((originX, pixelWidth, 0, originY, 0, pixelHeight))
 
     
@@ -237,9 +298,8 @@ def convertNETCDFtoTIF(inputFile,outputFile,format='float'):
         trans_arrayB=arrayB*float(scale)+float(offset)
         np.putmask(trans_arrayB,(arrayB==float(nodata)+1),0)
         outband = outRaster.GetRasterBand(b)
-
         outband.WriteArray(trans_arrayB)
     
-    outband.FlushCache()
-
-
+    spatialRef = osr.SpatialReference()
+    spatialRef.ImportFromEPSG(4326) 
+    outRaster.SetProjection(spatialRef.ExportToWkt())
