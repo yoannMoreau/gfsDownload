@@ -9,13 +9,16 @@ return true if control ok
 '''
 import os
 import errno
-from datetime import date,datetime
+from datetime import date,datetime, timedelta
 import ogr,osr
 import re
 import gdal
 import osr
 import numpy as np
 import subprocess
+import urllib2
+import pygrib
+from curses.ascii import isdigit
     
 def checkForFile(pathToFile):
     if os.path.isfile(pathToFile):
@@ -123,24 +126,41 @@ def checkForExtendValidity(extendList):
     else:
         exit('Area scpecified is not conform to a  ymax xmin ymin xmax  extend. please verify your declaration')
 
-def checkForTimeValidity(listTime):
+def checkForLevelValidity(levelList):
+    
+    levelPossible=['0-0.1_m_below_ground','0.1-0.4_m_below_ground','0.33-1_sigma_layer','0.4-1_m_below_ground','0.44-0.72_sigma_layer','0.44-1_sigma_layer','0.72-0.94_sigma_layer','0.995_sigma','0C_isotherm','1000_mb','100_m_above_ground','100_mb','10_m_above_ground','10_mb','1-2_m_below_ground','150_mb','180-0_mb_above_ground','1829_m_above_mean_sea','200_mb','20_mb','250_mb','255-0_mb_above_ground','2743_m_above_mean_sea','2_m_above_ground','3000-0_m_above_ground','300_mb','30-0_mb_above_ground','30_mb','350_mb','3658_m_above_mean_sea','400_mb','450_mb','500_mb','50_mb','550_mb','6000-0_m_above_ground','600_mb','650_mb','700_mb','70_mb','750_mb','800_mb','80_m_above_ground','850_mb','900_mb','925_mb','950_mb','975_mb','boundary_layer_cloud_layer','convective_cloud_bottom','convective_cloud_layer','convective_cloud_top','entire_atmosphere','entire_atmosphere_%5C%28considered_as_a_single_layer%5C%29','high_cloud_bottom','high_cloud_layer','high_cloud_top','tropopause','highest_tropospheric_freezing','low_cloud_bottom','low_cloud_layer','low_cloud_top','max_wind','mean_sea','middle_cloud_bottom','middle_cloud_layer','middle_cloud_top','planetary_boundary_layer','PV%3D-2e-06_%5C%28Km%5C%5E2%2Fkg%2Fs%5C%29_surface','PV%3D2e-06_%5C%28Km%5C%5E2%2Fkg%2Fs%5C%29_surface','surface','top_of_atmosphere']
+    if all([x in levelPossible for x in levelList]):
+        return levelList
+    else:
+        exit('One or more level declared is not available. Please choose one in those  : %s' % '\n'.join(levelPossible))
+
+def checkForParams(codeGFS):
+    codeGFSPossible=['all','4LFTX','5WAVH','ABSV','ACPCP','ALBDO','APCP','CAPE','CFRZR','CICEP','CIN','CLWMR','CPOFP','CPRAT','CRAIN','CSNOW','CWAT','CWORK','DLWRF','DPT','DSWRF','FLDCP','GFLUX','GUST','HGT','HINDEX','HLCY','HPBL','ICAHT','ICEC','LAND','LFTX','LHTFL','MSLET','O3MR','PEVPR','PLPL','POT','PRATE','PRES','PRMSL','PWAT','RH','SHTFL','SNOD','SOILW','SPFH','SUNSD','TCDC','TMAX','TMIN','TMP','TOZNE','TSOIL','UFLX','UGRD','U-GWD','ULWRF','USTM','USWRF','VFLX','VGRD','V-GWD','VRATE','VSTM','VVEL','VWSH','WATR','WEASD','WILT']
+    
+    if all([x in codeGFSPossible for x in codeGFS]):
+        return codeGFS
+    else:
+        exit('One or more level declared is not available. Please choose one in those  : %s' % '\n'.join(codeGFSPossible))
+        
+        
+def checkForProductValidity(listTime):
     
     validParameters=('00','06','12','18')
     
     if len(listTime)>0 and isinstance(listTime, list) and all([x in validParameters for x in listTime]):
         return listTime
     else: 
-        exit('time parameters not conform to eraInterim posibility : '+ ",".join(validParameters))
+        exit('time parameters not conform to GFS posibility : '+ ",".join(validParameters))
 
 def checkForStepValidity(listStep):
     
-    validParameters=(0,3,6,9,12)
+    validParameters=(0,6,12,18)
     
     if len(listStep)>0 and isinstance(listStep, list) and all([int(x) in validParameters for x in listStep]):
         listStep=[int(x) for x in listStep]
         return listStep
     else: 
-        exit('step parameters not conform to eraInterim posibility : '+ ",".join([str(x) for x in validParameters]))
+        exit('step parameters not conform to GFS posibility : '+ ",".join([str(x) for x in validParameters]))
 
 def checkForGridValidity(grid):
     
@@ -156,87 +176,77 @@ def checkForGridValidity(grid):
         exit('grid parameters not conform to eraInterim posibility : '+ ",".join([str(x) for x in validParameters]))
     
 
-def create_request_sfc(dateStart,dateEnd, timeList,stepList,grid,extent,paramList,output,typeData):
+def create_request_gfs(dateStart,dateEnd,stepList,levelList,grid,extent,paramList,output,typeData):
     """
-        Genere la structure de requete sur les serveurs de l'ECMWF
+        Genere la structure de requete pour le téléchargement de données GFS
         
         INPUTS:\n
         -date : au format annee-mois-jour\n
         -heure : au format heure:minute:seconde\n
         -coord : une liste des coordonnees au format [N,W,S,E]\n
-        -dim_grille : taille de la grille en degre \n
+        -dim_grille : taille de la grille en degree \n
         -output : nom & chemin du fichier resultat
     """
     
-    listForcastSurface=[129,172,31,32,33,34,35,36,37,38,39,40,41,42,59,78,79,134,136,137,139,141,148,151,159,164,165,166,167,168,170,183,186,187,188,198,206,229,230,231,232,235,236,238,243,244,245,20,44,45,50,57,58,142,143,145,146,147,169,175,176,177,178,179,180,181,182,189,195,196,197,205,208,209,210,211,212,239,240]
-    listAnalyseSurface=[27,28,29,30,74,129,160,161,162,163,172,31,32,33,34,35,36,37,38,39,40,41,42,134,136,137,139,141,148,151,164,165,166,167,168,170,173,174,183,186,187,188,198,206,234,235,236,238]
+    URLlist=[]
     
-    listForcast=[]
-    listAnalyse=[]
-    structure = []
+    #Control datetype
+    listForcastSurface=['GUST','HINDEX','PRES','HGT','TMP','WEASD','SNOD','CPOFP','WILT','FLDCP','SUNSD','LFTX','CAPE','CIN','4LFTX','HPBL','LAND']
+    if (0 not in [int(x) for x in stepList]):
+        listForcastSurface=listForcastSurface+['PEVPR','CPRAT','PRATE','APCP','ACPCP','WATR','CSNOW','CICEP','CFPER','CRAIN','LHTFL','SHTFL','SHTFL','GFLUX','UFLX','VFLX','U-GWD','V-GWD','DSWRF','DLWRF','ULWRF','USWRF','ALBDO']
+    listAnalyseSurface=['HGT','PRES','LFTX','CAPE','CIN','4LFTX']
     
-    if typeData=='forcast':
-        for i in paramList:
-            if int(i) in listForcastSurface:
-                listForcast.append(i)
-            else:
-                if int(i) in listAnalyseSurface:
-                    listAnalyse.append(i)
-                else:
-                    print "the parameter needed couldn't be downloaded because is not a Surface variable"
+    if typeData == 'analyse' and all([x in listAnalyseSurface for x in paramList]):
+        typeData= 'analyse'
+        validChoice = None
     else:
-        for i in paramList:
-            if int(i) in listAnalyseSurface:
-                listAnalyse.append(i)
-            else:
-                if int(i) in listForcastSurface:
-                    listForcast.append(i)
-                else:
-                    print "the parameter needed couldn't be downloaded because is not a Surface variable"
-    
-    if len(listAnalyse)>0:
-        struct = {
-        'dataset' : "interim",
-        'date'    : dateStart.strftime("%Y-%m-%d")+"/to/"+dateEnd.strftime("%Y-%m-%d"),
-        'time'    : "/".join(map(str, timeList)),
-        'stream'  : "oper",
-        'step'    : "/".join(map(str, stepList)),
-        'levtype' : "sfc", #TO DO pl -> pressure level ,sfc -> surface
-        'type'    : "an", #TO DO fc -> forcast , an -> analyse
-        'class'   : "ei",
-        'param'   : ".128/".join(map(str, listAnalyse))+'.128',
-        'area'    : "/".join(extent),
-        'grid'    : str(grid)+"/"+str(grid),
-        'target'  : output,
-        'format'  : 'netcdf'
-        }
-        structure.append(struct)
-    
-    if len(listForcast)>0:
-        struct = {
-        'dataset' : "interim",
-        'date'    : dateStart.strftime("%Y-%m-%d")+"/to/"+dateEnd.strftime("%Y-%m-%d"),
-        'time'    : "/".join(map(str, timeList)),
-        'stream'  : "oper",
-        'step'    : "/".join(map(str, stepList)),
-        'levtype' : "sfc", #TO DO pl -> pressure level ,sfc -> surface
-        'type'    : "fc", #TO DO fc -> forcast , an -> analyse
-        'class'   : "ei",
-        'param'   : ".128/".join(map(str, listForcast))+'.128',
-        'area'    : "/".join(extent),
-        'grid'    : str(grid)+"/"+str(grid),
-        'target'  : output,
-        'format'  : 'netcdf'
-        }
-        structure.append(struct)
-    
-    if typeData=='forcast' and len(listAnalyse)>0:
-        return (structure,",".join(listAnalyse),"analyse")
-    elif typeData=='analyse' and len(listForcast)>0:
-        return (structure,",".join(listForcast),"forecast")
+        typeData= 'forcast'
+        validChoice = typeData
+        indexParameters=[i for i, elem in enumerate([x in listAnalyseSurface for x in paramList], 1) if not elem]
+        prbParameters=[]
+        for i in indexParameters:
+            prbParameters.append(paramList[i-1])
+    #Control si date/timeList disponible
+    today=date.today()
+    lastData = today - timedelta(days=14)
+    if dateStart < lastData or dateEnd > today : 
+        exit('date are not in 14 days range from today' )
     else:
-        return (structure,None)
-
+        #Pour chaque jour souhaité
+        nbDays=(dateStart-dateEnd).days+1
+        for i in range(0,nbDays):
+            #on crontrole pour les timeList
+            if dateStart + timedelta(days=i) == today:
+                maxT=datetime.now().hour-5
+                timeListCorr=[ x for x in stepList if x<maxT ]
+            else:
+                timeListCorr=stepList
+              
+            for t in timeListCorr:
+                URL='http://nomads.ncep.noaa.gov/cgi-bin/filter_gfs_'
+                #grid
+                URL=URL+"{:.2f}".format(grid).replace('.','p')+'.pl?file=gfs.'
+                #time ( attention limiter avec décalage horaire for today
+                URL=URL+'t'+str(t).zfill(2)+'z.'
+                if (grid==0.5):
+                    URL=URL+'pgrb2full.'
+                else:
+                    URL=URL+'pgrb2.'
+                URL=URL+"{:.2f}".format(grid).replace('.','p')+'.'
+                
+                if typeData=='forcast':
+                    URL=URL+'f000&lev_'
+                else:
+                    URL=URL+'anl&lev_'
+                URL=URL+"=on&lev_".join(levelList)+"=on&var_"
+                URL=URL+"=on&var_".join(paramList)+"=on&subregion=&"
+                URL=URL+"leftlon="+str(round(float(extent[1])-0.05,1))+"&rightlon="+str(round(float(extent[3])+0.05,1))+"&toplat="+str(round(float(extent[0])+0.5,1))+"&bottomlat="+str(round(float(extent[2])-0.5,1))
+                URL=URL+"&dir=%2Fgfs."+"{:%Y%m%d}".format(dateStart+timedelta(days=i))+str(t).zfill(2)
+                URLlist.append(URL)
+        
+        print URLlist
+        return (URLlist,validChoice,prbParameters)
+    
 def reprojRaster(pathToImg,output,shape,pathToShape=None):
     
     driver = ogr.GetDriverByName('ESRI Shapefile')
@@ -261,45 +271,85 @@ def getShape(pathToImg):
     
     return (cols,rows)
 
-def convertNETCDFtoTIF(inputFile,outputFile,format='float'):
-    #--convert netCDF to tif
-    
-    ds_in=gdal.Open('NETCDF:"'+inputFile+'"')
-    metadata = ds_in.GetMetadata()
-    
-    for i in metadata.keys():
-        if i.find('scale_factor')>0:
-            scale=metadata[i]
-        elif i.find('add_offset')>0:
-            offset=metadata[i]
-        elif i.find('_FillValue')>0:
-            nodata=metadata[i]
+def GFSDownload(pathToFile,pathToOutputFile):
 
-    cols = ds_in.RasterXSize
-    rows = ds_in.RasterYSize
-    geotransform = ds_in.GetGeoTransform()
-    originX = geotransform[0]
-    originY = geotransform[3]
-    pixelWidth = geotransform[1]
-    pixelHeight = geotransform[5]
-    nbBand= ds_in.RasterCount
+    response = urllib2.urlopen(pathToFile)
     
-    driver = gdal.GetDriverByName('GTiff')
-    outRaster = driver.Create(outputFile,cols, rows, nbBand, gdal.GDT_Float32)
-    outRaster.SetGeoTransform((originX, pixelWidth, 0, originY, 0, pixelHeight))
+    try:
+        html = response.read()
+    except:
+        exit("error while downloading file")
+    
+    if len(html) > 0:
+        f = open(pathToOutputFile, 'wb')
+        f.write(html)
+        return True
+    else:
+        return False
 
+def writeTiffFromDicoArray(DicoArray,outputImg,shape,geoparam,proj=None,format=gdal.GDT_Float32):
     
-    for b in range(1,nbBand+1):
-        band = ds_in.GetRasterBand(b)
-        
-        arrayB = np.array(band.ReadAsArray(), dtype=format)
-        np.putmask(arrayB,(arrayB==float(nodata)),0)
-        #arrayB=numpy.multiply(arrayB, scale)+float(offset)
-        trans_arrayB=arrayB*float(scale)+float(offset)
-        np.putmask(trans_arrayB,(arrayB==float(nodata)+1),0)
-        outband = outRaster.GetRasterBand(b)
-        outband.WriteArray(trans_arrayB)
+    gdalFormat = 'GTiff'
+    driver = gdal.GetDriverByName(gdalFormat)
+
+    dst_ds = driver.Create(outputImg, shape[1], shape[0], len(DicoArray), format)
     
-    spatialRef = osr.SpatialReference()
-    spatialRef.ImportFromEPSG(4326) 
-    outRaster.SetProjection(spatialRef.ExportToWkt())
+    j=1
+    for i in DicoArray.values():
+        dst_ds.GetRasterBand(j).WriteArray(i, 0)
+        band = dst_ds.GetRasterBand(j)
+        band.SetNoDataValue(0)
+        j+=1
+    
+    originX =  geoparam[0]
+    originY =  geoparam[1]
+    pixelWidth = geoparam[2]
+    pixelHeight  = geoparam[3]
+
+    dst_ds.SetGeoTransform((originX, pixelWidth, 0, originY, 0, pixelHeight))
+    if proj==None:
+        spatialRef = osr.SpatialReference()
+        spatialRef.ImportFromEPSG(4326) 
+        dst_ds.SetProjection(spatialRef.ExportToWkt())
+
+def convertGribToTiff(listeFile,listParam,listLevel,liststep,grid,startDate,endDate,outFolder):
+    """ Convert GRIB to Tif"""
+    
+    dicoValues={}
+    
+    for l in listeFile:
+        grbs = pygrib.open(l)
+        grbs.seek(0)
+        index=1
+        for j in range(len(listLevel),0,-1):
+            for i in range(len(listParam)-1,-1,-1):
+                grb = grbs[index]
+                p=grb.name.replace(' ','_')
+                if grb.level != 0:
+                    l=str(grb.level)+'_'+grb.typeOfLevel
+                else:
+                    l=grb.typeOfLevel
+                if p+'_'+l not in dicoValues.keys():
+                    dicoValues[p+'_'+l]=[]
+                dicoValues[p+'_'+l].append(grb.values)
+                shape=grb.values.shape
+                lat,lon=grb.latlons()
+                geoparam=(lon.min(),lat.max(),grid,grid)
+                index+= 1
+
+    nbJour=(endDate-startDate).days+1
+    #on joute des arrayNan si il manque des fichiers
+    for s in range(0, (len(liststep)*nbJour-len(listeFile))):
+        for k in dicoValues.keys():
+            dicoValues[k].append(np.full(shape, np.nan))
+
+    #On écrit pour chacune des variables dans un fichier
+    for i in range(len(dicoValues.keys())-1,-1,-1):
+        dictParam=dict((k,dicoValues[dicoValues.keys()[i]][k]) for k in range(0,len(dicoValues[dicoValues.keys()[i]])))
+        sorted(dictParam.items(), key=lambda x: x[0])
+        outputImg=outFolder+'/'+dicoValues.keys()[i]+'_'+startDate.strftime('%Y%M%d')+'_'+endDate.strftime('%Y%M%d')+'.tif'
+        writeTiffFromDicoArray(dictParam,outputImg,shape,geoparam)
+    
+    for f in listeFile:
+        os.remove(f)
+
