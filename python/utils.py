@@ -166,7 +166,7 @@ def checkForGridValidity(grid):
     
     if (is_float_re(grid)):
         grid=float(grid)
-        validParameters=(0.125,0.25,0.5,0.75,1.125,1.5,2,2.5,3)
+        validParameters=(0.25,0.5,1,2.5)
         
         if grid in validParameters:
             return grid
@@ -176,7 +176,7 @@ def checkForGridValidity(grid):
         exit('grid parameters not conform to eraInterim posibility : '+ ",".join([str(x) for x in validParameters]))
     
 
-def create_request_gfs(dateStart,dateEnd,stepList,levelList,grid,extent,paramList,output,typeData):
+def create_request_gfs(dateStart,dateEnd,stepList,levelList,grid,extent,paramList,typeData):
     """
         Genere la structure de requete pour le téléchargement de données GFS
         
@@ -185,7 +185,6 @@ def create_request_gfs(dateStart,dateEnd,stepList,levelList,grid,extent,paramLis
         -heure : au format heure:minute:seconde\n
         -coord : une liste des coordonnees au format [N,W,S,E]\n
         -dim_grille : taille de la grille en degree \n
-        -output : nom & chemin du fichier resultat
     """
     
     URLlist=[]
@@ -199,13 +198,29 @@ def create_request_gfs(dateStart,dateEnd,stepList,levelList,grid,extent,paramLis
     if typeData == 'analyse' and all([x in listAnalyseSurface for x in paramList]):
         typeData= 'analyse'
         validChoice = None
+        prbParameters =  None
     else:
-        typeData= 'forcast'
-        validChoice = typeData
-        indexParameters=[i for i, elem in enumerate([x in listAnalyseSurface for x in paramList], 1) if not elem]
-        prbParameters=[]
-        for i in indexParameters:
-            prbParameters.append(paramList[i-1])
+        if all([x in listForcastSurface for x in paramList]) and typeData != 'cycleforecast':
+            if typeData=='analyse':
+                typeData= 'forecast'
+                validChoice = typeData
+            else:
+                validChoice = None
+            indexParameters=[i for i, elem in enumerate([x in listAnalyseSurface for x in paramList], 1) if not elem]
+            prbParameters=[]
+            for i in indexParameters:
+                prbParameters.append(paramList[i-1])
+        else:
+            if typeData != 'cycleforecast':
+                typeData= 'cycleforecast'
+                validChoice = typeData
+            else:
+                validChoice = None
+            indexParameters=[i for i, elem in enumerate([x in listAnalyseSurface for x in paramList], 1) if not elem]
+            prbParameters=[]
+            for i in indexParameters:
+                prbParameters.append(paramList[i-1])
+                
     #Control si date/timeList disponible
     today=date.today()
     lastData = today - timedelta(days=14)
@@ -213,7 +228,7 @@ def create_request_gfs(dateStart,dateEnd,stepList,levelList,grid,extent,paramLis
         exit('date are not in 14 days range from today' )
     else:
         #Pour chaque jour souhaité
-        nbDays=(dateStart-dateEnd).days+1
+        nbDays=(dateEnd-dateStart).days+1
         for i in range(0,nbDays):
             #on crontrole pour les timeList
             if dateStart + timedelta(days=i) == today:
@@ -234,7 +249,9 @@ def create_request_gfs(dateStart,dateEnd,stepList,levelList,grid,extent,paramLis
                     URL=URL+'pgrb2.'
                 URL=URL+"{:.2f}".format(grid).replace('.','p')+'.'
                 
-                if typeData=='forcast':
+                if typeData=='cycleforecast':
+                    URL=URL+'f006&lev_'
+                elif typeData=='forecast':
                     URL=URL+'f000&lev_'
                 else:
                     URL=URL+'anl&lev_'
@@ -244,7 +261,6 @@ def create_request_gfs(dateStart,dateEnd,stepList,levelList,grid,extent,paramLis
                 URL=URL+"&dir=%2Fgfs."+"{:%Y%m%d}".format(dateStart+timedelta(days=i))+str(t).zfill(2)
                 URLlist.append(URL)
         
-        print URLlist
         return (URLlist,validChoice,prbParameters)
     
 def reprojRaster(pathToImg,output,shape,pathToShape=None):

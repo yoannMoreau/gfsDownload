@@ -41,7 +41,7 @@ def main(argv):
             print '        --grid <GFS Grid> (default 0.75)'
             print '        --outfile <outfolder> (default /home/user/GFS)'
             print '        --proxy <proxy : True/False> (default False)'
-            print '        --mode <mode : analyse/forcast> (default analyse)'
+            print '        --mode <mode : analyse/forcast/cycleforecast> (default analyse)'
             print ''
             print 'EXAMPLES'
             print '--temperature on a shapefile'
@@ -105,6 +105,7 @@ def main(argv):
         print '    [-o <outfolder> (default /home/user/GFS)]'
         print '    [-P <proxy> (default False)]'
         print '    [-l <level> (default 2_m_above_ground)]'
+        print '    [-m <mode> (default analyse)]'
         print ''
         print 'For help on paramCode -help'
         sys.exit(2)
@@ -192,8 +193,7 @@ def main(argv):
         
     
     #Download GFS
-    outTIFFile=oFolder+'/'+"/".join([str(x) for x in codeGFS])+'_'+startDate.strftime('%Y%m%d')+'_'+endDate.strftime('%Y%m%d')+'.nc'
-    struct=utils.create_request_gfs(startDate, endDate, step, levelList, grid, extendArea, codeGFS, outTIFFile, mode)    
+    struct=utils.create_request_gfs(startDate, endDate, step, levelList, grid, extendArea, codeGFS, mode)    
     listeFile=[]
     
     if len(struct)==0:
